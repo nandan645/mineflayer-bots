@@ -144,6 +144,36 @@ async function depositToChest() {
   await walkTo(STAND_POS)
 }
 
+/** Deposit ALL items (including pickaxe) into chest */
+async function depositAllItemsToChest() {
+  bot.chat('Heading to chest to deposit everything...')
+  await walkTo(CHEST_POS, 2)
+
+  const chestBlock = bot.blockAt(CHEST_POS)
+  if (!chestBlock || !chestBlock.name.includes('chest')) {
+    bot.chat('Could not find chest at the specified location!')
+    return
+  }
+
+  const chest = await bot.openChest(chestBlock)
+
+  // Wait for chest inventory to fully load
+  await bot.waitForTicks(5)
+
+  const itemsCopy = [...bot.inventory.items()]
+  for (const item of itemsCopy) {
+    try {
+      await chest.deposit(item.type, null, item.count)
+    } catch (e) {
+      bot.chat('Chest might be full!')
+      break
+    }
+  }
+
+  chest.close()
+  bot.chat('Deposited all items to chest.')
+}
+
 // ─── MAIN MINING LOOP ─────────────────────────────────────────────────────────
 async function miningLoop() {
   bot.chat('Mining started!')
@@ -208,8 +238,14 @@ bot.on('chat', (username, message) => {
       if (!mining) {
         bot.chat('Not mining right now.')
       } else {
+        mining = false
         stopping = true
-        bot.chat('Stopping after current action...')
+        bot.chat('Stopping and depositing all items...')
+        depositAllItemsToChest().catch(err => {
+          bot.chat(`Error depositing items: ${err.message}`)
+        }).finally(() => {
+          stopping = false
+        })
       }
       break
 
