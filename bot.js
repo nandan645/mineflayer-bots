@@ -4,10 +4,10 @@ const { GoalNear } = goals
 const Vec3 = require('vec3')
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const COBBLE_POS        = new Vec3(8, 63, 6)   // cobblestone generator block
-const STAND_POS         = new Vec3(8, 63, 7)   // bot stands here to mine
-const CHEST_POS         = new Vec3(10, 64, 6)  // cobblestone chest
-const PICKAXE_CHEST_POS = new Vec3(10, 64, 6)  // pickaxe chest (change if different)
+const COBBLE_POS        = new Vec3(26, 63, -10)   // cobblestone generator block
+const STAND_POS         = new Vec3(26, 63, -9)   // bot stands here to mine
+const CHEST_POS         = new Vec3(28, 64, -10)  // cobblestone chest
+const PICKAXE_CHEST_POS = new Vec3(28, 64, -10)  // pickaxe chest (change if different)
 const COBBLE_ID         = 'cobblestone'
 const STACK_SIZE        = 64
 
@@ -65,7 +65,6 @@ async function fetchPickaxe() {
   await bot.waitForTicks(5)
 
   const allItems = chest.containerItems()
-  bot.chat(`Chest has ${allItems.length} items: ${allItems.map(i => i.name).join(', ')}`)
 
   const pick = allItems.find(i => i.name.includes('_pickaxe'))
 
