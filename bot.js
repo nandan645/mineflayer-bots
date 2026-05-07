@@ -4,21 +4,28 @@ const { GoalNear } = goals
 const Vec3 = require('vec3')
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const COBBLE_POS        = new Vec3(26, 63, -10)   // cobblestone generator block
-const STAND_POS         = new Vec3(26, 63, -9)   // bot stands here to mine
-const CHEST_POS         = new Vec3(28, 64, -10)  // cobblestone chest
-const PICKAXE_CHEST_POS = new Vec3(28, 64, -10)  // pickaxe chest (change if different)
+const ROCK_AREA = [
+  new Vec3(26, 64, 25),
+  new Vec3(26, 64, 26),
+  new Vec3(26, 64, 27),
+  new Vec3(26, 64, 28)
+]
+const STAND_POS         = new Vec3(26, 63, 23)   // bot stands here to mine
+const CHEST_POS         = new Vec3(28, 63, 24)  // cobblestone chest
+const PICKAXE_CHEST_POS = new Vec3(28, 63, 24)  // pickaxe chest (change if different)
 const COBBLE_ID         = 'cobblestone'
+const STONE_ID          = 'stone'
 const STACK_SIZE        = 64
 
 const bot = mineflayer.createBot({
   host: '143.244.130.94',   // change to your server IP
   port: 6945,         // change if needed
-  username: 'MinerBot',
+  username: 'MinerBot', // change to your bot's username
   version: '1.20.6'
 })
 
 bot.loadPlugin(pathfinder)
+const mcData = require('minecraft-data')(bot.version)
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let mining   = false   // is the bot in mining loop?
@@ -26,10 +33,10 @@ let stopping = false   // stop requested mid-loop?
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-/** Count cobblestone in inventory */
-function cobbleCount() {
+/** Count cobblestone and stone in inventory */
+function rockCount() {
   return bot.inventory.items()
-    .filter(i => i.name === COBBLE_ID)
+    .filter(i => i.name === COBBLE_ID || i.name === STONE_ID)
     .reduce((sum, i) => sum + i.count, 0)
 }
 
@@ -93,25 +100,26 @@ async function ensurePickaxe() {
 
 /** Walk to an exact position */
 async function walkTo(vec3, radius = 0) {
-  const mcData = require('minecraft-data')(bot.version)
   const movements = new Movements(bot, mcData)
   movements.canDig = false
   bot.pathfinder.setMovements(movements)
   await bot.pathfinder.goto(new GoalNear(vec3.x, vec3.y, vec3.z, radius))
 }
 
-/** Mine ONLY the block at the fixed cobblestone position */
-async function mineOneCobble() {
-  const block = bot.blockAt(COBBLE_POS)
-  if (!block || block.name !== COBBLE_ID) {
-    // Wait for generator to produce cobblestone
-    await bot.waitForTicks(10)
-    return
+/** Mine one block from the stone generator area, whether cobblestone or stone */
+async function mineOneRock() {
+  for (const pos of ROCK_AREA) {
+    const block = bot.blockAt(pos)
+    if (block && (block.name === COBBLE_ID || block.name === STONE_ID)) {
+      await bot.dig(block)
+      return
+    }
   }
-  await bot.dig(block)
+
+  // No block available yet; return immediately so the loop can retry quickly
 }
 
-/** Deposit all cobblestone into chest */
+/** Deposit all mined rocks into chest */
 async function depositToChest() {
   bot.chat('Heading to chest...')
   await walkTo(CHEST_POS, 2)
@@ -128,7 +136,7 @@ async function depositToChest() {
   await bot.waitForTicks(5)
 
   for (const item of bot.inventory.items()) {
-    if (item.name === COBBLE_ID) {
+    if (item.name === COBBLE_ID || item.name === STONE_ID) {
       try {
         await chest.deposit(item.type, null, item.count)
       } catch (e) {
@@ -139,7 +147,7 @@ async function depositToChest() {
   }
 
   chest.close()
-  bot.chat('Deposited cobblestone. Returning to mining spot...')
+  bot.chat('Deposited mined blocks. Returning to mining spot...')
   await walkTo(STAND_POS)
 }
 
@@ -197,11 +205,11 @@ async function miningLoop() {
       await walkTo(STAND_POS)
     }
 
-    await mineOneCobble()
+    await mineOneRock()
 
-    // If a full stack accumulated, deposit it
-    if (cobbleCount() >= STACK_SIZE) {
-      bot.chat(`Inventory has ${cobbleCount()} cobblestone. Depositing...`)
+    // If a full stack of mined stone/cobblestone accumulated, deposit it
+    if (rockCount() >= STACK_SIZE) {
+      bot.chat(`Inventory has ${rockCount()} mined blocks. Depositing...`)
       await depositToChest()
     }
 
@@ -249,8 +257,8 @@ bot.on('chat', (username, message) => {
       break
 
     case '!keep':
-      if (cobbleCount() === 0) {
-        bot.chat('No cobblestone to deposit.')
+      if (rockCount() === 0) {
+        bot.chat('No mined blocks to deposit.')
       } else {
         const wasMining = mining
         mining = false  // pause loop
@@ -270,7 +278,9 @@ bot.on('chat', (username, message) => {
     case '!status': {
       const pick = bot.inventory.items().find(i => i.name.includes('_pickaxe'))
       const pickInfo = pick ? pick.name : 'none'
-      bot.chat(`Mining: ${mining} | Cobblestone: ${cobbleCount()} | Pickaxe: ${pickInfo}`)
+      const cobble = bot.inventory.items().filter(i => i.name === COBBLE_ID).reduce((sum, i) => sum + i.count, 0)
+      const stone = bot.inventory.items().filter(i => i.name === STONE_ID).reduce((sum, i) => sum + i.count, 0)
+      bot.chat(`Mining: ${mining} | Cobblestone: ${cobble} | Stone: ${stone} | Pickaxe: ${pickInfo}`)
       break
     }
 
